@@ -1,0 +1,73 @@
+#include <stdio.h>
+#include <stdlib.h>
+#include <pthread.h>
+#include <semaphore.h>
+#include <unistd.h>
+#define BUFFER_SIZE 5
+#define NUM_PRODUCERS 2
+#define NUM_CONSUMERS 2
+#define NUM_ITEMS 10
+int buffer[BUFFER_SIZE];
+int in = 0;
+int out = 0;
+sem_t empty;
+sem_t full;
+pthread_mutex_t mutex;
+void* producer(void* param) {
+    int producer_id = *((int*)param);
+    for (int i = 0; i < NUM_ITEMS; i++) {
+        int item = rand() % 100;
+        sem_wait(&empty);
+        pthread_mutex_lock(&mutex);
+        buffer[in] = item;
+        printf("Producer %d: Inserted item %d at index %d\n", producer_id, item, in);
+        in = (in + 1) % BUFFER_SIZE;
+        pthread_mutex_unlock(&mutex);
+        sem_post(&full);
+        sleep(1);
+    }
+    return NULL;
+}
+void* consumer(void* param) {
+    int consumer_id = *((int*)param);
+    for (int i = 0; i < NUM_ITEMS; i++) {
+        sem_wait(&full);
+        pthread_mutex_lock(&mutex);
+        int item = buffer[out];
+        printf("Consumer %d: Removed item %d from index %d\n", consumer_id, item, out);
+        out = (out + 1) % BUFFER_SIZE;
+        pthread_mutex_unlock(&mutex);
+        sem_post(&empty);
+        sleep(2);
+    }
+    return NULL;
+}
+int main() {
+    pthread_t producers[NUM_PRODUCERS];
+    pthread_t consumers[NUM_CONSUMERS];
+    int prod_ids[NUM_PRODUCERS];
+    int cons_ids[NUM_CONSUMERS];
+    pthread_mutex_init(&mutex, NULL);
+    sem_init(&empty, 0, BUFFER_SIZE);
+    sem_init(&full, 0, 0);
+    for (int i = 0; i < NUM_PRODUCERS; i++) {
+        prod_ids[i] = i + 1;
+        pthread_create(&producers[i], NULL, producer, &prod_ids[i]);
+    }
+    for (int i = 0; i < NUM_CONSUMERS; i++) {
+        cons_ids[i] = i + 1;
+        pthread_create(&consumers[i], NULL, consumer, &cons_ids[i]);
+    }
+    for (int i = 0; i < NUM_PRODUCERS; i++) {
+        pthread_join(producers[i], NULL);
+    }
+    for (int i = 0; i < NUM_CONSUMERS; i++) {
+        pthread_join(consumers[i], NULL);
+    }
+    pthread_mutex_destroy(&mutex);
+    sem_destroy(&empty);
+    sem_destroy(&full);
+
+    printf("All threads have finished execution.\n");
+    return 0;
+}
